@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+case "${1:-}" in
+    xss|traversal|rce)
+        sudo touch "/etc/cyber-lab/hardened-$1"
+        echo "$1: hardened"
+        ;;
+    *) echo "uso: cyber-harden xss|traversal|rce" >&2; exit 2 ;;
+esac

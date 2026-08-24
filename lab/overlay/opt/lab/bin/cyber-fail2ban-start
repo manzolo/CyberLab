@@ -1,0 +1,8 @@
+#!/bin/sh
+# Il demone nasce dentro il namespace del difensore: le regole che installa
+# devono filtrare la sua INPUT, non quella dell'attaccante.
+set -u
+[ ! -s /run/fail2ban/fail2ban.pid ] || kill "$(cat /run/fail2ban/fail2ban.pid)" 2>/dev/null || true
+rm -f /run/fail2ban/fail2ban.sock /run/fail2ban/fail2ban.pid \
+      /var/lib/fail2ban/fail2ban.sqlite3
+/run/lab/entra-server fail2ban-client -x start

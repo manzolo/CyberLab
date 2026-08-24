@@ -1,0 +1,23 @@
+#!/bin/sh
+# Porta in page cache interprete e moduli pesanti senza lasciare difese attive.
+set -eu
+
+JAIL=/etc/fail2ban/jail.d/cyber-lab.conf
+sed -i 's/^enabled = false/enabled = true/' "$JAIL"
+
+cleanup() {
+    /run/lab/entra-server fail2ban-client stop >/dev/null 2>&1 || true
+    rm -f /run/fail2ban/fail2ban.sock /run/fail2ban/fail2ban.pid \
+          /var/lib/fail2ban/fail2ban.sqlite3
+    sed -i 's/^enabled = true/enabled = false/' "$JAIL"
+    /run/lab/entra-server iptables -F INPUT >/dev/null 2>&1 || true
+    /run/lab/entra-server iptables -F >/dev/null 2>&1 || true
+    /run/lab/entra-server iptables -X >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+/opt/lab/bin/cyber-fail2ban-start >/dev/null
+/run/lab/entra-server fail2ban-client stop >/dev/null
+/run/lab/entra-server fail2ban-regex \
+    /var/log/cyber-lab/audit.log \
+    /etc/fail2ban/filter.d/cyber-good.conf >/dev/null

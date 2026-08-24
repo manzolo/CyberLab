@@ -1,0 +1,4 @@
+#!/bin/sh
+while :; do
+    printf 'CYBER-DB internal only\n' | nc -l -p 3306 2>/dev/null || true
+done

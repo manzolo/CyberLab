@@ -1,0 +1,123 @@
+#!/bin/sh
+# lab-hosts-up — fa esistere i due host. Gira UNA VOLTA, al boot, PRIMA che lo
+# snapshot venga salvato: cosi' chi apre il lab trova la topologia gia' in piedi
+# in mezzo secondo, e non paga niente.
+#
+# Perche' due network namespace e non due macchine virtuali: una CPU x86 emulata
+# in WASM e' cara, due sono il doppio. Qui il kernel e' uno solo, ma le pile di
+# rete sono due davvero (CONFIG_NET_NS=y, veth.ko), gli indirizzi sono due, e in
+# mezzo c'e' un cavo vero. `ssh` non se ne accorge, ed e' tutto quello che serve.
+#
+# Quello che NON e' vero, e che il capitolo 1 dice apertamente: stesso kernel,
+# stesso disco, stessi processi. E' quello che e' un container.
+
+set -e
+
+PC_IP=10.10.0.1
+SRV_IP=10.10.0.2
+UTENTE_PC=attacker
+UTENTE_SRV=defender
+STATO=/run/lab
+
+mkdir -p "$STATO" /run/netns /var/empty
+
+# --- il modulo del cavo -------------------------------------------------------
+# `ip link add ... type veth` lo caricherebbe da solo, ma se un giorno mancasse
+# si vedrebbe un errore oscuro molto piu' avanti: meglio dirlo qui.
+modprobe veth 2>/dev/null || { echo "lab-hosts-up: manca il modulo veth"; exit 1; }
+
+# --- il secondo host ----------------------------------------------------------
+if ! ip netns list 2>/dev/null | grep -q '^server'; then
+    ip netns add server
+    ip link add veth-pc type veth peer name veth-srv
+    ip link set veth-srv netns server
+
+    ip addr add "$PC_IP/24" dev veth-pc
+    ip link set veth-pc up
+
+    ip netns exec server ip link set lo up
+    ip netns exec server ip addr add "$SRV_IP/24" dev veth-srv
+    ip netns exec server ip link set veth-srv up
+fi
+
+# --- il NOME del secondo host --------------------------------------------------
+#
+# Il nome di una macchina non sta nel namespace di rete: sta in un namespace a
+# parte, l'UTS. `ip netns exec server` porta dentro la pila di rete giusta e basta
+# — quindi un processo avviato cosi' ha l'indirizzo del server e il NOME del pc.
+#
+# Si vedeva nel punto peggiore: entrando con `ssh defender@10.10.0.2` il prompt
+# diceva `defender@pc`. Cioe' il lab dichiarava di averti portato sull'altra macchina
+# e poi ti mostrava il nome di quella di partenza — e il prompt e' l'unica cosa,
+# dopo un ssh, che dice davvero dove sei.
+#
+# `unshare --uts=FILE` crea il namespace e lo tiene in vita con un bind mount,
+# esattamente come `ip netns add` fa per la rete. Da qui in poi chiunque debba
+# essere "il server" entra in TUTTI E DUE: --net e --uts.
+if [ ! -s "$STATO/uts-server" ]; then
+    : > "$STATO/uts-server"
+    unshare --uts="$STATO/uts-server" hostname defender
+fi
+
+# Un solo posto che sa come si entra nel server, cosi' non si puo' dimenticarne
+# meta' (ed e' esattamente quello che era successo).
+cat > "$STATO/entra-server" <<FINE
+#!/bin/sh
+exec nsenter --net=/var/run/netns/server --uts=$STATO/uts-server -- "\$@"
+FINE
+chmod 755 "$STATO/entra-server"
+
+# --- i due utenti -------------------------------------------------------------
+# Li crea il Dockerfile, a build time: qui resta solo la rete di sicurezza, perche'
+# senza di loro non parte niente e un errore muto costerebbe un'ora.
+#
+# (Il punto meno ovvio di tutta l'architettura, e il motivo per cui gli utenti sono
+# due: due namespace di RETE non sono due filesystem. Se il pc e il server fossero
+# lo stesso utente, ~/.ssh sarebbe LO STESSO FILE e "copiare la chiave sul server"
+# non vorrebbe dire niente.)
+for u in "$UTENTE_PC" "$UTENTE_SRV"; do
+    id "$u" >/dev/null 2>&1 || { echo "lab-hosts-up: manca l'utente $u"; exit 1; }
+done
+
+# --- la chiave di identita' del server ----------------------------------------
+# Solo ed25519. Anche la chiave iniziale arriva dal pool generato a build time:
+# non si paga entropia sulla CPU emulata e i capitoli 6 e 7 possono sostituirla
+# con un'altra coppia senza generare niente a runtime.
+if [ ! -f /etc/ssh/ssh_host_ed25519_key ]; then
+    install -m 600 /opt/lab/hostkeys/01/ssh_host_ed25519_key \
+        /etc/ssh/ssh_host_ed25519_key
+    install -m 644 /opt/lab/hostkeys/01/ssh_host_ed25519_key.pub \
+        /etc/ssh/ssh_host_ed25519_key.pub
+fi
+
+cat > /etc/ssh/sshd_config.lab <<'FINE'
+HostKey /etc/ssh/ssh_host_ed25519_key
+LogLevel VERBOSE
+UseDNS no
+PermitRootLogin no
+PasswordAuthentication yes
+PubkeyAuthentication yes
+Subsystem sftp /usr/lib/ssh/sftp-server
+FINE
+
+# La prima impronta del config e' la baseline prima di qualunque esercizio. A
+# ogni seed l'agente la aggiorna DOPO aver costruito il mondo, cosi' anche un
+# esercizio che cambia intenzionalmente MaxAuthTries ha un riferimento corretto.
+sha256sum /etc/ssh/sshd_config.lab | awk '{print $1}' \
+    > /opt/lab/state/sshd_config.fp
+
+# --- sshd, dentro il namespace del server (rete E nome) ------------------------
+# Le sessioni che sshd apre ereditano i suoi namespace: e' avviandolo qui dentro
+# che `ssh defender@...` finisce su una macchina che si chiama davvero `server`.
+/opt/lab/bin/lab-sshd-riavvia
+
+printf '%s' "$SRV_IP"      > "$STATO/srv_ip"
+printf '%s' "$PC_IP"       > "$STATO/pc_ip"
+printf '%s' "$UTENTE_SRV"  > "$STATO/srv_user"
+printf '%s' "$UTENTE_PC"   > "$STATO/pc_user"
+
+# HTTP/PHP, archivio senza autenticazione e servizio TCP vivono gia' dentro lo
+# snapshot. Ogni esercizio puo' romperli e `cyber_reset` li rimette in piedi.
+/opt/lab/bin/cyber-services-up
+
+echo "lab-hosts-up: $UTENTE_PC@attacker $PC_IP  <-->  $UTENTE_SRV@defender $SRV_IP"

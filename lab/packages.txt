@@ -1,0 +1,37 @@
+# Pacchetti dell'immagine ospite. Una riga per gruppo, i commenti si ignorano.
+# Regola: qui dentro deve esserci il Linux VERO, non BusyBox.
+
+# --- base di sistema (da tools/docker/alpine di copy/v86) ---
+alpine-base openrc agetty alpine-conf linux-virt linux-firmware-none
+
+# --- il cuore GNU: senza questi si insegnerebbe BusyBox ---
+bash coreutils findutils grep sed gawk diffutils
+
+# --- amministrazione: processi, dischi, archivi ---
+util-linux procps-ng psmisc file tar gzip xz less
+
+# --- editor ed esplorazione ---
+vim nano tree ncurses-terminfo-base
+
+# --- utenti, permessi, testo strutturato ---
+shadow sudo acl attr jq bc
+
+# --- rete e dischi. Qui la rete NON e' finta: due network namespace collegati da
+#     una coppia veth sono due host veri, e iproute2 e' lo strumento che li crea.
+iproute2 curl e2fsprogs busybox-extras iptables nmap
+
+# --- SSH reale come servizio della superficie d'attacco e canale amministrativo.
+#     I pacchetti separati conservano anche gli strumenti diagnostici ereditati
+#     dal motore SshLab e usati dalle regressioni di identità.
+openssh-client openssh-server openssh-keygen openssh-sftp-server
+
+# --- manuali strettamente didattici ---
+# Restano il lettore e le pagine OpenSSH utili a ispezionare il servizio esposto,
+# senza ripristinare tutta la documentazione generica.
+mandoc openssh-doc
+
+# --- bersagli e difese del Cyber Lab ---
+# PHP usa il server integrato: due processi piccoli, nessun web server aggiuntivo.
+# fail2ban e iptables sono quelli reali; i check non si accontentano mai del loro
+# stato, ma lanciano la sonda dalla rete dell'attaccante e misurano l'effetto.
+php83 fail2ban py3-inotify

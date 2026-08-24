@@ -1,0 +1,54 @@
+#!/bin/sh
+# Avvia i bersagli soltanto nell'host difensivo e soltanto sull'indirizzo interno.
+set -eu
+ENTER=/run/lab/entra-server
+RUN=/run/cyber-lab
+LOG=/var/log/cyber-lab
+
+mkdir -p "$RUN" "$LOG" /var/lib/cyber-lab
+chown -R defender:defender "$RUN" "$LOG" /var/lib/cyber-lab
+# Il rootfs v86 è 9p: il poller di fail2ban non osserva in modo affidabile le
+# append su quel filesystem. Il registro vivo sta quindi nel tmpfs di /run;
+# il percorso didattico stabile in /var/log resta un link trasparente.
+[ -L "$LOG/audit.log" ] || {
+    rm -f "$LOG/audit.log"
+    : > "$RUN/audit.log"
+    ln -s "$RUN/audit.log" "$LOG/audit.log"
+}
+chown defender:defender "$RUN/audit.log"
+
+start_php() {
+    port=$1; name=$2
+    pid="$RUN/$name.pid"
+    [ ! -s "$pid" ] || kill "$(cat "$pid")" 2>/dev/null || true
+    rm -f "$pid"
+    "$ENTER" start-stop-daemon --start --background --make-pidfile --pidfile "$pid" \
+        --chuid defender --exec /usr/bin/php83 -- \
+        -S "10.10.0.2:$port" /opt/cyber-lab/app/router.php
+}
+
+start_httpd() {
+    port=$1; name=$2
+    user=defender
+    [ "$port" -ne 80 ] || user=root
+    pid="$RUN/$name.pid"
+    [ ! -s "$pid" ] || kill "$(cat "$pid")" 2>/dev/null || true
+    rm -f "$pid"
+    "$ENTER" start-stop-daemon --start --background --make-pidfile --pidfile "$pid" \
+        --chuid "$user" --exec /usr/sbin/httpd -- \
+        -f -p "10.10.0.2:$port" -h /opt/cyber-lab/public
+}
+
+start_php 8080 web
+start_php 9000 store
+start_httpd 80 public
+start_httpd 9090 internal
+
+# Un servizio TCP minimo per la fascia "mai": esiste davvero e risponde, finche'
+# il firewall non lo isola. La shell resta nel namespace del difensore.
+if [ -s "$RUN/db.pid" ]; then kill "$(cat "$RUN/db.pid")" 2>/dev/null || true; fi
+rm -f "$RUN/db.pid"
+"$ENTER" start-stop-daemon --start --background --make-pidfile --pidfile "$RUN/db.pid" \
+    --chuid defender --exec /opt/lab/bin/cyber-db-listener
+
+sleep 1

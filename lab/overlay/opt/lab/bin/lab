@@ -1,0 +1,98 @@
+#!/bin/sh
+# lab — la CLI che l'utente ha in mano.
+#
+# Nel browser serve soprattutto per `lab answer` (gli esercizi di sola lettura);
+# puo' anche preparare e verificare gli script gia' caricati nella macchina.
+
+set -u
+LIB=/opt/lab/lib/labcheck.sh
+STATE=/opt/lab/state
+LAB="${LAB:-$HOME/lab}"
+mkdir -p "$STATE"
+
+uso() {
+    cat <<'EOF'
+lab — laboratorio di EDU-CYBER
+
+  lab answer            consegna una risposta letta da stdin
+                        es:  grep -c ERROR app.log | lab answer
+  lab answer 42         consegna una risposta scritta a mano
+  lab start CH EX       prepara un esercizio gia' caricato
+  lab check [CH EX]     verifica l'esercizio
+  lab reset             ricomincia da capo, stesso mondo
+  lab seed              mostra il seme del mondo attuale
+EOF
+}
+
+corrente() { cat "$STATE/current" 2>/dev/null; }
+
+esegui() { # esegui <dir> <script>
+    [ -f "/opt/lab/$1/$2" ] || { echo "esercizio non disponibile qui: $1"; exit 2; }
+    EDU_SEED="$(cat "$STATE/seed" 2>/dev/null || echo 1)" LAB="$LAB" \
+        sh -c ". $LIB; . '/opt/lab/$1/$2'"
+}
+
+registra_sshd_config() {
+    sha256sum /etc/ssh/sshd_config.lab 2>/dev/null | awk '{print $1}' \
+        > "$STATE/sshd_config.fp"
+}
+
+case "${1:-}" in
+    answer)
+        shift
+        # Si scrive, si rilegge, e SOLO ALLORA si conferma. La versione precedente
+        # annunciava "risposta consegnata:" anche quando la scrittura era fallita —
+        # e siccome la cartella delle consegne era di root mentre chi studia e'
+        # `attacker`, falliva sempre. Restavano due righe di errore e, sotto, un
+        # messaggio rassicurante: un guasto travestito da successo, che e' la forma
+        # peggiore. (Trovato da Andrea al primo uso a mano, il 2026-08-16.)
+        if [ $# -gt 0 ]; then printf '%s' "$*" > "$STATE/answer" 2>/dev/null
+        else cat > "$STATE/answer" 2>/dev/null; fi
+        consegnata=$(tr -d '\n' < "$STATE/answer" 2>/dev/null)
+        if [ -z "$consegnata" ]; then
+            echo "non sono riuscito a registrare la risposta in $STATE/answer" >&2
+            echo "(dev'essere scrivibile da $(id -un): controlla i permessi)" >&2
+            exit 1
+        fi
+        echo "risposta consegnata: $consegnata"
+        # Se la risposta ha piu' di una parola quasi sempre e' un incidente di
+        # battitura o di incolla — `lab answer lab 10.10.0.2` invece di
+        # `lab answer 10.10.0.2`. La verifica lo direbbe comunque, ma dopo, e con un
+        # `got=` che si somiglia abbastanza da far pensare di aver scritto giusto.
+        # Meglio dirlo qui, mentre si ha ancora in mano il comando.
+        # Si avvisa e basta: la risposta resta quella scritta, perche' indovinare
+        # cosa intendeva l'utente e' peggio che dirgli cosa ha scritto.
+        if [ "$#" -gt 1 ]; then
+            echo "attenzione: hai consegnato $# valori separati da spazio." >&2
+            echo "            se intendevi solo l'ultimo, riscrivi: lab answer $(eval echo \"\$$#\")" >&2
+        fi
+        ;;
+    start)
+        [ $# -eq 3 ] || { uso; exit 1; }
+        d="ch$2/e$3"
+        printf '%s' "$d" > "$STATE/current"
+        [ -f "$STATE/seed" ] || date +%s > "$STATE/seed"
+        rm -rf "$LAB"; mkdir -p "$LAB"; rm -f "$STATE/answer"
+        esegui "$d" seed.sh || exit $?
+        registra_sshd_config
+        echo "pronto. La tua area di lavoro e' $LAB"
+        ;;
+    check)
+        if [ $# -eq 3 ]; then d="ch$2/e$3"; else d="$(corrente)"; fi
+        [ -n "$d" ] || { echo "nessun esercizio in corso: usa  lab start CH EX"; exit 1; }
+        out=$(esegui "$d" check.sh); rc=$?
+        echo "$out" | sed -n 's/^EDU CHECK /  /p'
+        echo "$out" | sed -n 's/^EDU RESULT /  esito: /p'
+        [ $rc -eq 0 ] && echo "  ✓ superato" || echo "  ✗ non ancora"
+        exit $rc
+        ;;
+    reset)
+        d="$(corrente)"; [ -n "$d" ] || { echo "nessun esercizio in corso"; exit 1; }
+        rm -rf "$LAB"; mkdir -p "$LAB"; rm -f "$STATE/answer"
+        esegui "$d" seed.sh || exit $?
+        registra_sshd_config
+        echo "ricominciato (stesso mondo)"
+        ;;
+    seed) cat "$STATE/seed" 2>/dev/null || echo "(nessun seme)" ;;
+    *) uso ;;
+esac

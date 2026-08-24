@@ -1,0 +1,12 @@
+#!/bin/sh
+# Strumento deliberatamente chiuso: bersaglio fisso sulla sola LAN del lab.
+set -eu
+n=${1:-5}; token=${2:-lesson}
+case "$n" in *[!0-9]*|'') exit 2;; esac
+[ "$n" -ge 1 ] && [ "$n" -le 20 ] || { echo "numero ammesso: 1..20" >&2; exit 2; }
+i=0
+while [ "$i" -lt "$n" ]; do
+    curl -sS --max-time 3 "http://10.10.0.2:8080/login?token=$token" >/dev/null || true
+    i=$((i + 1))
+done
+echo "$n tentativi inviati a 10.10.0.2"
