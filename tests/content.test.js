@@ -83,6 +83,10 @@ for (const cap of capitoliCaricati.filter(c => !c.__errore)) {
             assert.ok(es.brief, `${cap.id}.${es.id}: manca la consegna`);
             assert.ok((es.checks || []).length, `${cap.id}.${es.id}: nessun check dichiarato`);
             assert.ok((es.hints || []).length >= 2, `${cap.id}.${es.id}: servono almeno due suggerimenti`);
+            for (const [i, passo] of (es.come || []).entries()) {
+                if (passo.cmd) assert.doesNotMatch(passo.cmd, /[\r\n]/,
+                    `${cap.id}.${es.id}.come[${i}]: ogni comando deve stare su una riga; usa passi distinti`);
+            }
 
             // Gli id dei check dichiarati nel chapter.js devono combaciare con quelli
             // emessi da check.sh: altrimenti il verdetto mostra un id senza spiegazione.
