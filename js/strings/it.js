@@ -36,6 +36,8 @@ export default {
     tipoRisposta: "risposta",
     tipoMetodo: "metodo",
     comeSiFa: "Come si fa",
+    dovePc: "attacker · sinistra",
+    doveServer: "defender · destra",
     esercizi: "Esercizi",
     esercizio: "Esercizio {0}",
     verifica: "Verifica",

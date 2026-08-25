@@ -15,6 +15,7 @@
 
 import { macchina, risveglia } from "./machine.js";
 import { shell } from "./agent.js";
+import { normalizzaInputTerminale } from "./input.js";
 
 // La chiave e' il numero della seriale, che e' anche l'identita' della macchina.
 const terminali = new Map();
@@ -77,7 +78,7 @@ export function creaTerminale(contenitore, uart) {
     // l'altra macchina sta stampando, visto che le due seriali condividono la linea
     // di interruzione — smette di esserlo. La coda costa qualche millisecondo su un
     // incolla lungo e toglie di mezzo l'intera classe di guasti.
-    term.onData(d => accoda(uart, new TextEncoder().encode(d)));
+    term.onData(d => accoda(uart, new TextEncoder().encode(normalizzaInputTerminale(d))));
     macchina().add_listener(`serial${uart}-output-byte`, b => {
         term.write(String.fromCharCode(b));
         const t = terminali.get(uart);

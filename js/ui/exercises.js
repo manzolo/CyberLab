@@ -238,7 +238,12 @@ function costruisciComeSiFa(es) {
     for (const passo of es.come) {
         const li = el("li");
         if (passo.dove) {
-            const tag = el("span", `dove dove-${passo.dove}`, passo.dove);
+            // Nei dati restano i nomi tecnici pc/server, ma a chi studia mostriamo
+            // gli stessi nomi scritti sopra i terminali. Aggiungere anche il lato
+            // evita di costringere chi e' al primo capitolo a ricordare una mappa.
+            const etichetta = passo.dove === "pc" ? t("dovePc")
+                : passo.dove === "server" ? t("doveServer") : passo.dove;
+            const tag = el("span", `dove dove-${passo.dove}`, etichetta);
             li.append(tag);
         }
         li.insertAdjacentHTML("beforeend", tr(passo.testo));

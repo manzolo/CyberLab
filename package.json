@@ -14,7 +14,7 @@
   "scripts": {
     "serve": "python3 -m http.server 8803",
     "image": "make -C lab all",
-    "test": "node --test tests/content.test.js tests/opzioni.test.js",
+    "test": "node --test tests/content.test.js tests/opzioni.test.js tests/terminale.test.js",
     "test:labs": "node tests/labs.mjs",
     "test:consegna": "node tests/regressione-consegna.mjs",
     "test:cwd": "node tests/regressione-cwd.mjs",
