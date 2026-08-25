@@ -19,6 +19,7 @@ import { normalizzaInputTerminale } from "./input.js";
 
 // La chiave e' il numero della seriale, che e' anche l'identita' della macchina.
 const terminali = new Map();
+let inputAbilitato = true;
 
 export const UART = { pc: 0, server: 2 };
 
@@ -55,6 +56,7 @@ export function creaTerminale(contenitore, uart) {
     const term = new window.Terminal({
         convertEol: true,
         cursorBlink: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+        disableStdin: !inputAbilitato,
         fontFamily: 'ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace',
         fontSize: 13,
         // Lo scrollback costa memoria e qui i terminali sono due. 2500 righe
@@ -78,7 +80,9 @@ export function creaTerminale(contenitore, uart) {
     // l'altra macchina sta stampando, visto che le due seriali condividono la linea
     // di interruzione — smette di esserlo. La coda costa qualche millisecondo su un
     // incolla lungo e toglie di mezzo l'intera classe di guasti.
-    term.onData(d => accoda(uart, new TextEncoder().encode(normalizzaInputTerminale(d))));
+    term.onData(d => {
+        if (inputAbilitato) accoda(uart, new TextEncoder().encode(normalizzaInputTerminale(d)));
+    });
     macchina().add_listener(`serial${uart}-output-byte`, b => {
         term.write(String.fromCharCode(b));
         const t = terminali.get(uart);
@@ -89,6 +93,24 @@ export function creaTerminale(contenitore, uart) {
     adatta(contenitore, uart);
     return term;
 }
+
+/** Durante seed e reset il mondo sta cambiando: accettare caratteri in quella
+ *  finestra crea comandi eseguiti a meta' o cancellati subito dopo. `disableStdin`
+ *  ferma xterm; la guardia in onData e' la seconda cintura per input gia' in coda
+ *  nel browser. */
+export function abilitaInputTerminali(v) {
+    inputAbilitato = !!v;
+    if (!inputAbilitato) {
+        // Un incolla lungo puo' avere ancora byte nella coda ritmata della UART:
+        // non devono scivolare nel seed appena iniziato.
+        for (const coda of code.values()) coda.byte.length = 0;
+    }
+    for (const { term } of terminali.values()) term.options.disableStdin = !inputAbilitato;
+}
+
+// Esposto soprattutto al banco e2e: la sola classe CSS non dimostra che i byte
+// siano davvero fermati prima della UART.
+export const inputTerminaliSonoAbilitati = () => inputAbilitato;
 
 /** Il colore e' l'identita' della macchina: ciano il pc, ambra il server. */
 function temaDi(uart) {
