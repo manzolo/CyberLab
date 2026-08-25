@@ -19,13 +19,13 @@ export default creaCapitolo({
     pro: { it: "<p>Il valore nel registro è codificato Base64 per tenere una riga per evento, non per proteggerlo. Base64 è una rappresentazione, non cifratura.</p>", en: "<p>The value in the log is Base64-encoded to keep one line per event, not to protect it. Base64 is a representation, not encryption.</p>" },
     exercise: {
         brief: { it: "Leggi <code>~/lab/token.txt</code> sull'attaccante e invialo con POST al servizio <code>:9000/store</code>, senza usare il terminale del difensore.", en: "Read <code>~/lab/token.txt</code> on the attacker and POST it to <code>:9000/store</code>, without using the defender terminal." },
-        come: [{ dove: "pc", testo: { it: "Invia il contenuto esatto:", en: "Send the exact content:" }, cmd: "curl -X POST --data-binary @~/lab/token.txt http://10.10.0.2:9000/store" }],
+        come: [{ dove: "pc", testo: { it: "Invia il contenuto esatto:", en: "Send the exact content:" }, cmd: "curl -X POST --data-binary @$HOME/lab/token.txt http://10.10.0.2:9000/store" }],
         nota: { it: "Il check pretende il token seminato nel magazzino e una riga del difensore con <code>ip=10.10.0.1</code>.", en: "The check requires the seeded token in storage and a defender record with <code>ip=10.10.0.1</code>." },
         checks: [
             check("scrittura-remota", "Nel magazzino non c'è il token di questo mondo.", "This world's token is not in storage.", "Usa <code>--data-binary @file</code> per non cambiare il contenuto.", "Use <code>--data-binary @file</code> so the content is unchanged."),
             check("ip-nel-registro", "Manca la prova che la scrittura sia arrivata dall'attaccante.", "There is no proof the write arrived from the attacker.", "Sul difensore guarda <code>/var/log/cyber-lab/audit.log</code>.", "On the defender inspect <code>/var/log/cyber-lab/audit.log</code>."),
         ],
-        hints: [{ it: "Il file del token è sulla macchina sinistra.", en: "The token file is on the left machine." }, { it: "Non copiare il token a mano: <code>@percorso</code> fa leggere il corpo a curl.", en: "Do not copy the token by hand: <code>@path</code> makes curl read the body." }],
+        hints: [{ it: "Il file del token è sulla macchina sinistra.", en: "The token file is on the left machine." }, { it: "Non copiare il token a mano: <code>@percorso</code> fa leggere il corpo a curl. Dopo <code>@</code> usa <code>$HOME</code>: in <code>@~/...</code> la shell non espande la tilde.", en: "Do not copy the token by hand: <code>@path</code> makes curl read the body. After <code>@</code>, use <code>$HOME</code>: the shell does not expand the tilde in <code>@~/...</code>." }],
     },
     recap: [riga("curl -X POST", "esegue una scrittura HTTP reale", "perform a real HTTP write", "--data-binary @file", "--data-binary @file"), riga("audit.log", "dice chi ha scritto", "states who wrote", "testimone lato difensore", "defender-side witness")],
 });
