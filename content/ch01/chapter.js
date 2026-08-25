@@ -32,18 +32,20 @@ export default creaCapitolo({
     },
     exercise: {
         tipo: "stato",
-        brief: { it: "Da <strong>attacker</strong> esegui una scansione TCP delle sei porte indicate e salva il risultato in <code>~/lab/scan.txt</code>. La prova deve arrivare davvero al difensore.", en: "From <strong>attacker</strong>, run a TCP scan of the six listed ports and save the result to <code>~/lab/scan.txt</code>. The probe must really reach the defender." },
+        brief: { it: "Da <strong>attacker</strong> esegui una scansione TCP delle sei porte indicate e salva il risultato in <code>~/lab/scan.txt</code>. Poi interroga l'endpoint <code>/health</code>: questa seconda richiesta lascia nel registro del difensore la prova dell'IP sorgente reale.", en: "From <strong>attacker</strong>, run a TCP scan of the six listed ports and save the result to <code>~/lab/scan.txt</code>. Then request the <code>/health</code> endpoint: this second request records evidence of the real source IP in the defender's log." },
         come: [
             { dove: "pc", testo: { it: "Scansiona solo il bersaglio interno e conserva il referto:", en: "Scan only the internal target and keep the report:" }, cmd: "nmap -sT -p 22,80,3306,8080,9000,9090 10.10.0.2 | tee ~/lab/scan.txt" },
+            { dove: "pc", testo: { it: "Genera una prova applicativa che registri il tuo IP sorgente:", en: "Generate application-level evidence that records your source IP:" }, cmd: "curl http://10.10.0.2:8080/health" },
             { dove: "server", testo: { it: "Confronta dall'interno:", en: "Compare from the inside:" }, cmd: "sudo ss -tln" },
+            { dove: "server", testo: { it: "Osserva la richiesta arrivata al servizio:", en: "Inspect the request received by the service:" }, cmd: "sudo tail -n 5 /var/log/cyber-lab/audit.log" },
         ],
-        nota: { it: "La verifica legge il referto, ricava le porte attualmente in ascolto e pretende anche una connessione registrata dal servizio PHP. Un file inventato non basta.", en: "The check reads the report, derives currently listening ports, and also requires a connection logged by the PHP service. A fabricated file is not enough." },
+        nota: { it: "<code>nmap -sT</code> prova le connessioni TCP ma non invia una richiesta HTTP, quindi da solo non genera la riga <code>HEALTH</code>. La verifica controlla sia le porte nel referto sia la richiesta <code>/health</code> registrata dal servizio PHP. Un file inventato non basta.", en: "<code>nmap -sT</code> tests TCP connections but does not send an HTTP request, so by itself it does not generate the <code>HEALTH</code> entry. The check verifies both the ports in the report and the <code>/health</code> request logged by the PHP service. A fabricated file is not enough." },
         checks: [
             check("porte-elencate", "Il referto non elenca tutte le porte realmente aperte.", "The report does not list every port that is actually open.", "Ripeti la scansione con <code>-sT</code> e le sei porte della consegna.", "Repeat the scan with <code>-sT</code> and the six assigned ports."),
-            check("sonda-arrivata", "Nel registro del difensore non compare l'IP dell'attaccante.", "The defender log does not contain the attacker's IP.", "Prova anche <code>curl http://10.10.0.2:8080/health</code>, poi rifai la scansione.", "Also try <code>curl http://10.10.0.2:8080/health</code>, then scan again."),
+            check("sonda-arrivata", "Nel registro del difensore non compare l'IP dell'attaccante.", "The defender log does not contain the attacker's IP.", "Da attacker esegui <code>curl http://10.10.0.2:8080/health</code>, poi verifica di nuovo.", "From attacker, run <code>curl http://10.10.0.2:8080/health</code>, then check again."),
         ],
         hints: [
-            { it: "<code>-sT</code> apre connessioni TCP complete: il difensore può vederle.", en: "<code>-sT</code> opens full TCP connections: the defender can see them." },
+            { it: "<code>-sT</code> apre connessioni TCP complete; <code>curl</code> aggiunge la richiesta HTTP che il servizio registra.", en: "<code>-sT</code> opens full TCP connections; <code>curl</code> adds the HTTP request logged by the service." },
             { it: "Il file deve contenere righe <code>porta/tcp open</code>, non soltanto il comando.", en: "The file must contain <code>port/tcp open</code> lines, not just the command." },
         ],
     },
