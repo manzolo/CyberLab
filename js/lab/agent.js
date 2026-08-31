@@ -18,8 +18,8 @@ let inizializzato = false;
 let buffer = "";
 let prossimoId = 1;
 const inAttesa = new Map();
-let prontoResolve;
-const pronto = new Promise(r => prontoResolve = r);
+let prontoResolve, prontoReject;
+const pronto = new Promise((res, rej) => { prontoResolve = res; prontoReject = rej; });
 
 function inizializza() {
     if (inizializzato) return;
@@ -42,7 +42,27 @@ function inizializza() {
     });
     // L'agente ha gia' annunciato "ready" PRIMA dello snapshot, quindi quel messaggio
     // non arrivera' mai: un ping conferma che e' vivo nello stato ripristinato.
-    chiedi("ping").then(() => prontoResolve(1)).catch(() => {});
+    //
+    // E si INSISTE. Il ping ha 5 secondi di timeout, e su una CPU lenta — uno
+    // smartphone, dove l'emulazione va molte volte piu' piano, o una scheda che il
+    // browser ha strozzato durante il caricamento — il guest puo' metterci di piu'.
+    // Il colpo singolo di prima lasciava la pagina su «terminali in pausa» per
+    // sempre: la risposta in ritardo viene scartata apposta (vedi sopra) e nessuno
+    // riprovava. Oltre il tetto si dichiara il guasto, che accende `labErrore`:
+    // un errore onesto vale piu' di un'attesa infinita.
+    (async () => {
+        const scadenza = Date.now() + 120000;
+        for (;;) {
+            try { await chiedi("ping"); prontoResolve(1); return; }
+            catch {
+                if (Date.now() > scadenza) {
+                    prontoReject(new Error("l'agente non ha mai risposto al ping"));
+                    return;
+                }
+                await new Promise(r => setTimeout(r, 500));
+            }
+        }
+    })();
 }
 
 function chiedi(op, ...arg) {
